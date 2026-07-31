@@ -1,13 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ClientOnly } from "@tanstack/react-router";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Layers, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import PlannerPanel from "@/components/PlannerPanel";
 import ElevationChart from "@/components/ElevationChart";
+import { useSession } from "@/hooks/useSession";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  deleteSavedRoute,
+  listSavedRoutes,
+  saveRoute,
+  type SavedRoute,
+} from "@/lib/saved-routes";
 import {
   generateRoute,
   geocodePlace,
   parsePrompt,
+  snapRouteToPaths,
   type GeneratedRoute,
   type LatLng,
   type Vehicle,
@@ -16,6 +26,7 @@ import {
 const TrailMap = lazy(() => import("@/components/TrailMap"));
 
 const DEFAULT_CENTER: LatLng = { lat: 18.7883, lng: 98.9853 }; // Chiang Mai
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -58,6 +69,24 @@ function Index() {
   const [loading, setLoading] = useState(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [layer, setLayer] = useState<"street" | "topo">("topo");
+  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
+  const [saving, setSaving] = useState(false);
+  const { user } = useSession();
+  const navigate = useNavigate();
+
+  const refreshSaved = useCallback(() => {
+    if (!user) {
+      setSavedRoutes([]);
+      return;
+    }
+    listSavedRoutes()
+      .then(setSavedRoutes)
+      .catch(() => setSavedRoutes([]));
+  }, [user]);
+
+  useEffect(() => {
+    refreshSaved();
+  }, [refreshSaved]);
 
   useEffect(() => {
     if (!("geolocation" in navigator)) {
@@ -90,11 +119,56 @@ function Index() {
           setCenter(geo);
         }
       }
-      await new Promise((r) => setTimeout(r, 350));
-      setRoute(generateRoute(prompt, origin, vehicle));
+      const draft = generateRoute(prompt, origin, vehicle);
+      // Snap the drafted loop onto real OpenStreetMap ways so the drawn line
+      // follows the tracks and roads visible on the map.
+      const snapped = await snapRouteToPaths(draft);
+      setRoute(snapped);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSave() {
+    if (!route) return;
+    if (!user) {
+      navigate({ to: "/auth" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveRoute(route, user.id);
+      toast.success("Route saved to your account");
+      refreshSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save route");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteSaved(id: string) {
+    try {
+      await deleteSavedRoute(id);
+      setSavedRoutes((rs) => rs.filter((r) => r.id !== id));
+    } catch {
+      toast.error("Could not delete route");
+    }
+  }
+
+  function handleOpenSaved(s: SavedRoute) {
+    const r = s.route;
+    setRoute(r);
+    setPrompt(r.prompt);
+    setVehicle(r.vehicle);
+    setHoverIndex(null);
+    if (r.points[0]) setCenter({ lat: r.points[0].lat, lng: r.points[0].lng });
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    setSavedRoutes([]);
+    toast.success("Signed out");
   }
 
   return (
@@ -109,8 +183,16 @@ function Index() {
           loading={loading}
           route={route}
           locationLabel={locationLabel}
+          userEmail={user?.email ?? null}
+          onSignOut={handleSignOut}
+          onSave={handleSave}
+          saving={saving}
+          savedRoutes={savedRoutes}
+          onOpenSaved={handleOpenSaved}
+          onDeleteSaved={handleDeleteSaved}
         />
       </div>
+
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="relative min-h-0 flex-1">

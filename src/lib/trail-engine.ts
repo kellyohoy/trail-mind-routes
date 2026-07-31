@@ -369,3 +369,92 @@ export function downloadGPX(route: GeneratedRoute) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/* ---------- snap to real OSM ways (OSRM) ---------- */
+
+function interpolateEle(points: RoutePoint[], fraction: number) {
+  const total = points[points.length - 1]!.dist || 1;
+  const target = fraction * total;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    if (b.dist >= target) {
+      const span = b.dist - a.dist || 1;
+      const t = (target - a.dist) / span;
+      return a.ele + (b.ele - a.ele) * t;
+    }
+  }
+  return points[points.length - 1]!.ele;
+}
+
+/**
+ * Snap a synthesised loop onto real OpenStreetMap ways using the public OSRM
+ * service, so the drawn line follows actual tracks/roads on the map instead of
+ * cutting across terrain. Falls back to the original geometry on any failure.
+ */
+export async function snapRouteToPaths(route: GeneratedRoute): Promise<GeneratedRoute> {
+  try {
+    const wanted = 9;
+    const step = Math.max(1, Math.floor((route.points.length - 1) / wanted));
+    const waypoints: LatLng[] = [];
+    for (let i = 0; i < route.points.length - 1; i += step) waypoints.push(route.points[i]!);
+    waypoints.push(route.points[0]!); // close the loop
+
+    const coords = waypoints.map((p) => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`).join(";");
+    const res = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&continue_straight=false`,
+    );
+    if (!res.ok) return route;
+    const json = (await res.json()) as {
+      code: string;
+      routes?: Array<{ geometry: { coordinates: [number, number][] } }>;
+    };
+    const geo = json.routes?.[0]?.geometry.coordinates;
+    if (json.code !== "Ok" || !geo || geo.length < 10) return route;
+
+    // Build snapped points with distance + elevation resampled from the profile.
+    const raw: LatLng[] = geo.map(([lng, lat]) => ({ lat, lng }));
+    const dists: number[] = [0];
+    for (let i = 1; i < raw.length; i++) dists.push(dists[i - 1]! + haversine(raw[i - 1]!, raw[i]!));
+    const total = dists[dists.length - 1]!;
+    if (!total) return route;
+
+    const points: RoutePoint[] = raw.map((p, i) => ({
+      ...p,
+      dist: dists[i]!,
+      ele: Math.round(interpolateEle(route.points, dists[i]! / total)),
+    }));
+
+    let ascent = 0;
+    let descent = 0;
+    for (let i = 1; i < points.length; i++) {
+      const d = points[i]!.ele - points[i - 1]!.ele;
+      if (d > 0) ascent += d;
+      else descent -= d;
+    }
+
+    const distanceKm = total / 1000;
+    const speed = route.vehicle === "moto" ? 26 : 12;
+    const estMinutes = Math.round(
+      (distanceKm / speed) * 60 + ascent / (route.vehicle === "moto" ? 12 : 8),
+    );
+
+    return {
+      ...route,
+      points,
+      distanceKm,
+      ascent: Math.round(ascent),
+      descent: Math.round(descent),
+      maxEle: Math.max(...points.map((p) => p.ele)),
+      minEle: Math.min(...points.map((p) => p.ele)),
+      avgGrade: (ascent / total) * 100,
+      estMinutes,
+      description: route.description.replace(
+        /^A [\d.]+ km loop/,
+        `A ${distanceKm.toFixed(1)} km loop`,
+      ),
+    };
+  } catch {
+    return route;
+  }
+}

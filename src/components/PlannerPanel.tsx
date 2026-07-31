@@ -1,27 +1,34 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   Bike,
+  Bookmark,
   Compass,
   Download,
   ExternalLink,
   Gauge,
   Loader2,
+  LogIn,
+  LogOut,
   MapPin,
   Mountain,
   Route as RouteIcon,
   Send,
   Star,
   Timer,
+  Trash2,
   TrendingUp,
 } from "lucide-react";
 import type { GeneratedRoute, Vehicle } from "@/lib/trail-engine";
 import { downloadGPX } from "@/lib/trail-engine";
+import type { SavedRoute } from "@/lib/saved-routes";
 
 const EXAMPLES = [
   "Rocky singletrack with high elevation gain near Chiang Mai",
   "Long flowy forest loop near Innsbruck",
   "Technical hard enduro green lanes near Málaga",
 ];
+
 
 function Stat({
   icon: Icon,
@@ -52,6 +59,13 @@ export default function PlannerPanel({
   loading,
   route,
   locationLabel,
+  userEmail,
+  onSignOut,
+  onSave,
+  saving,
+  savedRoutes,
+  onOpenSaved,
+  onDeleteSaved,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
@@ -61,22 +75,93 @@ export default function PlannerPanel({
   loading: boolean;
   route: GeneratedRoute | null;
   locationLabel: string;
+  userEmail: string | null;
+  onSignOut: () => void;
+  onSave: () => void;
+  saving: boolean;
+  savedRoutes: SavedRoute[];
+  onOpenSaved: (r: SavedRoute) => void;
+  onDeleteSaved: (id: string) => void;
 }) {
   const [tab, setTab] = useState<"brief" | "beta">("brief");
+  const [showSaved, setShowSaved] = useState(false);
 
   return (
     <div className="flex h-full flex-col overflow-hidden border-r border-border bg-sidebar">
       {/* Header */}
       <header className="border-b border-border px-5 py-4">
-        <div className="flex items-center gap-2">
-          <Compass className="size-5 text-primary" />
-          <h1 className="font-display text-lg font-semibold tracking-tight">TrailMind AI</h1>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Compass className="size-5 text-primary" />
+            <h1 className="font-display text-lg font-semibold tracking-tight">TrailMind AI</h1>
+          </div>
+          {userEmail ? (
+            <button
+              onClick={onSignOut}
+              title={userEmail}
+              className="flex items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+            >
+              <LogOut className="size-3" />
+              Sign out
+            </button>
+          ) : (
+            <Link
+              to="/auth"
+              className="flex items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+            >
+              <LogIn className="size-3" />
+              Sign in
+            </Link>
+          )}
         </div>
         <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
           <MapPin className="size-3 text-accent" />
           {locationLabel}
         </p>
+        {userEmail && (
+          <button
+            onClick={() => setShowSaved(!showSaved)}
+            className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-accent"
+          >
+            <Bookmark className="size-3" />
+            {showSaved ? "Hide saved routes" : `Saved routes (${savedRoutes.length})`}
+          </button>
+        )}
+        {userEmail && showSaved && (
+          <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">
+            {savedRoutes.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                Nothing saved yet — plan a route and hit Save.
+              </p>
+            ) : (
+              savedRoutes.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center gap-2 rounded-sm border border-border bg-card p-2"
+                >
+                  <button
+                    onClick={() => onOpenSaved(s)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <div className="truncate text-xs font-medium">{s.name}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {Number(s.distance_km).toFixed(1)} km · {s.ascent} m up · {s.difficulty}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => onDeleteSaved(s.id)}
+                    aria-label={`Delete ${s.name}`}
+                    className="text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </header>
+
 
       {/* Composer */}
       <div className="border-b border-border px-5 py-4">
@@ -173,6 +258,20 @@ export default function PlannerPanel({
               <Download className="size-4" />
               Download .GPX
             </button>
+
+            <button
+              onClick={onSave}
+              disabled={saving}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-sm border border-border bg-secondary px-4 py-2.5 text-sm font-semibold text-secondary-foreground transition-colors hover:border-primary disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Bookmark className="size-4" />
+              )}
+              {userEmail ? "Save route" : "Sign in to save route"}
+            </button>
+
             <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
               Loads straight into Garmin, Wahoo, Trail Tech or Gaia.
             </p>
