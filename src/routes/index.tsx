@@ -229,6 +229,13 @@ function Index() {
           savedRoutes={savedRoutes}
           onOpenSaved={handleOpenSaved}
           onDeleteSaved={handleDeleteSaved}
+          avoid={avoid}
+          onToggleAvoid={toggleAvoid}
+          pins={pins}
+          clickMode={clickMode}
+          setClickMode={setClickMode}
+          onRemovePin={removePin}
+          onClearPins={() => setPins([])}
         />
       </div>
 
@@ -237,9 +244,19 @@ function Index() {
         <div className="relative min-h-0 flex-1">
           <ClientOnly fallback={<MapSkeleton />}>
             <Suspense fallback={<MapSkeleton />}>
-              <TrailMap route={route} center={center} hoverIndex={hoverIndex} layer={layer} />
+              <TrailMap
+                route={route}
+                center={center}
+                hoverIndex={hoverIndex}
+                layer={layer}
+                pins={pins}
+                clickMode={clickMode}
+                onMapClick={handleMapClick}
+                onPinClick={removePin}
+              />
             </Suspense>
           </ClientOnly>
+
 
           <button
             onClick={() => setLayer(layer === "topo" ? "street" : "topo")}
