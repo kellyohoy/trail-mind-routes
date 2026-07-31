@@ -112,11 +112,42 @@ function Index() {
     );
   }, []);
 
+  function toggleAvoid(o: AvoidOption) {
+    setAvoid((a) => (a.includes(o) ? a.filter((x) => x !== o) : [...a, o]));
+  }
+
+  function handleMapClick(p: LatLng) {
+    if (clickMode === "area") {
+      setCenter(p);
+      setLocationLabel(`Planning around ${p.lat.toFixed(3)}, ${p.lng.toFixed(3)}`);
+      return;
+    }
+    setPins((prev) => {
+      if (prev.length < 2) return [...prev, p];
+      // Extra clicks become waypoints between the start and the finish.
+      return [...prev.slice(0, -1), p, prev[prev.length - 1]!];
+    });
+  }
+
+  function removePin(i: number) {
+    setPins((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
   async function handleGenerate() {
-    if (!prompt.trim()) return;
+    if (pins.length < 2 && !prompt.trim()) return;
     setLoading(true);
     setHoverIndex(null);
     try {
+      if (pins.length >= 2) {
+        const planned = await planWaypointRoute(prompt, pins, vehicle, avoid);
+        if (!planned) {
+          toast.error("Could not connect those pins by road — try moving them closer to a route.");
+          return;
+        }
+        setRoute(planned);
+        return;
+      }
+
       const { place } = parsePrompt(prompt);
       let origin = center;
       if (place) {
@@ -129,12 +160,13 @@ function Index() {
       const draft = generateRoute(prompt, origin, vehicle);
       // Snap the drafted loop onto real OpenStreetMap ways so the drawn line
       // follows the tracks and roads visible on the map.
-      const snapped = await snapRouteToPaths(draft);
+      const snapped = await snapRouteToPaths(draft, avoid);
       setRoute(snapped);
     } finally {
       setLoading(false);
     }
   }
+
 
   async function handleSave() {
     if (!route) return;
