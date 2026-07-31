@@ -6,6 +6,7 @@ import {
   Compass,
   Download,
   ExternalLink,
+  Flag,
   Gauge,
   Loader2,
   LogIn,
@@ -14,13 +15,15 @@ import {
   Mountain,
   Route as RouteIcon,
   Send,
+  ShieldOff,
   Star,
   Timer,
   Trash2,
   TrendingUp,
+  X,
 } from "lucide-react";
-import type { GeneratedRoute, Vehicle } from "@/lib/trail-engine";
-import { downloadGPX } from "@/lib/trail-engine";
+import type { AvoidOption, GeneratedRoute, LatLng, Vehicle } from "@/lib/trail-engine";
+import { AVOID_OPTIONS, downloadGPX } from "@/lib/trail-engine";
 import type { SavedRoute } from "@/lib/saved-routes";
 
 const EXAMPLES = [
@@ -28,6 +31,13 @@ const EXAMPLES = [
   "Long flowy forest loop near Innsbruck",
   "Technical hard enduro green lanes near Málaga",
 ];
+
+function pinLabel(i: number, total: number) {
+  if (i === 0) return "Start";
+  if (i === total - 1 && total > 1) return "Finish";
+  return `Waypoint ${i}`;
+}
+
 
 
 function Stat({
