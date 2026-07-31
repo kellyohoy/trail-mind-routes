@@ -17,11 +17,14 @@ import {
   generateRoute,
   geocodePlace,
   parsePrompt,
+  planWaypointRoute,
   snapRouteToPaths,
+  type AvoidOption,
   type GeneratedRoute,
   type LatLng,
   type Vehicle,
 } from "@/lib/trail-engine";
+
 
 const TrailMap = lazy(() => import("@/components/TrailMap"));
 
