@@ -1,27 +1,34 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   Bike,
+  Bookmark,
   Compass,
   Download,
   ExternalLink,
   Gauge,
   Loader2,
+  LogIn,
+  LogOut,
   MapPin,
   Mountain,
   Route as RouteIcon,
   Send,
   Star,
   Timer,
+  Trash2,
   TrendingUp,
 } from "lucide-react";
 import type { GeneratedRoute, Vehicle } from "@/lib/trail-engine";
 import { downloadGPX } from "@/lib/trail-engine";
+import type { SavedRoute } from "@/lib/saved-routes";
 
 const EXAMPLES = [
   "Rocky singletrack with high elevation gain near Chiang Mai",
   "Long flowy forest loop near Innsbruck",
   "Technical hard enduro green lanes near Málaga",
 ];
+
 
 function Stat({
   icon: Icon,
