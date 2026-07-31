@@ -33,7 +33,7 @@ export async function saveRoute(route: GeneratedRoute, userId: string) {
     ascent: route.ascent,
     est_minutes: route.estMinutes,
     difficulty: route.difficulty,
-    route: route as unknown as Record<string, unknown>,
+    route: JSON.parse(JSON.stringify(route)),
   });
   if (error) throw error;
 }
