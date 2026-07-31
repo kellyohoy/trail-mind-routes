@@ -76,6 +76,13 @@ export default function PlannerPanel({
   savedRoutes,
   onOpenSaved,
   onDeleteSaved,
+  avoid,
+  onToggleAvoid,
+  pins,
+  clickMode,
+  setClickMode,
+  onRemovePin,
+  onClearPins,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
@@ -92,9 +99,18 @@ export default function PlannerPanel({
   savedRoutes: SavedRoute[];
   onOpenSaved: (r: SavedRoute) => void;
   onDeleteSaved: (id: string) => void;
+  avoid: AvoidOption[];
+  onToggleAvoid: (o: AvoidOption) => void;
+  pins: LatLng[];
+  clickMode: "area" | "pins";
+  setClickMode: (m: "area" | "pins") => void;
+  onRemovePin: (i: number) => void;
+  onClearPins: () => void;
 }) {
   const [tab, setTab] = useState<"brief" | "beta">("brief");
   const [showSaved, setShowSaved] = useState(false);
+  const ptp = pins.length >= 2;
+
 
   return (
     <div className="flex h-full flex-col overflow-hidden border-r border-border bg-sidebar">
