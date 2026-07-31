@@ -206,14 +206,11 @@ export function generateRoute(
   );
 
   const techScore = (cfg.technical ? 2 : 0) + (avgGrade > 5 ? 2 : avgGrade > 3 ? 1 : 0);
-  const difficulty =
+  const difficulty = (
     vehicle === "moto"
-      ? ["Green lane", "Trail / Easy enduro", "Hard enduro", "Extreme enduro"][
-          Math.min(3, techScore)
-        ]
-      : ["Blue — flowy", "Blue/Black", "Black — technical", "Double black"][
-          Math.min(3, techScore)
-        ];
+      ? ["Green lane", "Trail / Easy enduro", "Hard enduro", "Extreme enduro"]
+      : ["Blue — flowy", "Blue/Black", "Black — technical", "Double black"]
+  )[Math.min(3, techScore)]!;
 
   const placeLabel = cfg.place ?? "your location";
   const name = routeName(prompt, cfg, rnd, placeLabel);
