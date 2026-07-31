@@ -530,7 +530,7 @@ export async function snapRouteToPaths(
     for (let i = 0; i < route.points.length - 1; i += step) waypoints.push(route.points[i]!);
     waypoints.push(route.points[0]!); // close the loop
 
-    const geo = await osrmGeometry(waypoints, avoid, true);
+    const geo = await osrmGeometry(waypoints, avoid, true, route.vehicle);
     if (!geo || geo.coords.length < 10) return route;
 
     const built = buildFromGeometry(geo.coords, route.vehicle, (frac) =>
@@ -567,7 +567,7 @@ export async function planWaypointRoute(
   avoid: AvoidOption[] = [],
 ): Promise<GeneratedRoute | null> {
   if (pins.length < 2) return null;
-  const geo = await osrmGeometry(pins, avoid, false);
+  const geo = await osrmGeometry(pins, avoid, false, vehicle);
   if (!geo) return null;
 
   const cfg = parsePrompt(prompt);
