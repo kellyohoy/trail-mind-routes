@@ -40,11 +40,11 @@ export const Route = createFileRoute("/")({
         content:
           "Describe the ride you want and TrailMind AI drafts a route on OpenStreetMap with an elevation profile, trail beta and an instant .gpx download.",
       },
-      { property: "og:title", content: "TrailMind AI — AI Route Planner for MTB & Moto" },
+      { property: "og:title", content: "TrailMind AI — AI Route Planner for MTB & Adventure Moto" },
       {
         property: "og:description",
         content:
-          "Prompt-to-route planning with live map, elevation graph and one-click GPX export for your GPS computer.",
+          "Describe the ride you want and TrailMind AI drafts a route on OpenStreetMap with an elevation profile, trail beta and an instant .gpx download.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

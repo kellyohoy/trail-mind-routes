@@ -78,18 +78,22 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "TrailMind AI" },
+      { title: "TrailMind AI — AI Route Planner for MTB & Adventure Moto" },
       {
         name: "description",
-        content: "AI route planning for mountain bikers and adventure motorcyclists.",
+        content: "Describe the ride you want and TrailMind AI drafts a route on OpenStreetMap with an elevation profile, trail beta and an instant .gpx download.",
       },
-      { property: "og:title", content: "TrailMind AI" },
+      { property: "og:title", content: "TrailMind AI — AI Route Planner for MTB & Adventure Moto" },
       {
         property: "og:description",
-        content: "AI route planning for mountain bikers and adventure motorcyclists.",
+        content: "Describe the ride you want and TrailMind AI drafts a route on OpenStreetMap with an elevation profile, trail beta and an instant .gpx download.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "TrailMind AI — AI Route Planner for MTB & Adventure Moto" },
+      { name: "twitter:description", content: "Describe the ride you want and TrailMind AI drafts a route on OpenStreetMap with an elevation profile, trail beta and an instant .gpx download." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/57084346-bf58-4ae1-8753-878e71898dad/id-preview-0d1f7754--f9476c42-2fb7-4bac-a547-ca0c182ec6f8.lovable.app-1785489732452.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/57084346-bf58-4ae1-8753-878e71898dad/id-preview-0d1f7754--f9476c42-2fb7-4bac-a547-ca0c182ec6f8.lovable.app-1785489732452.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
