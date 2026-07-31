@@ -37,6 +37,8 @@ export type GeneratedRoute = {
   description: string;
   highlights: string[];
   refs: TrailRef[];
+  avoid?: AvoidOption[];
+  mode?: "loop" | "ptp";
 };
 
 export type Vehicle = "mtb" | "moto";
