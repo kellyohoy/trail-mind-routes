@@ -370,6 +370,100 @@ export function downloadGPX(route: GeneratedRoute) {
   URL.revokeObjectURL(url);
 }
 
+/* ---------- road-type avoidance ---------- */
+
+export type AvoidOption = "motorway" | "toll" | "ferry" | "unpaved" | "backroad";
+
+export const AVOID_OPTIONS: { id: AvoidOption; label: string; hint: string }[] = [
+  { id: "motorway", label: "Highways", hint: "Skip motorways and trunk roads" },
+  { id: "unpaved", label: "Off-road", hint: "Prefer sealed surfaces over dirt and gravel" },
+  { id: "backroad", label: "Back roads", hint: "Stay on bigger, better-maintained roads" },
+  { id: "toll", label: "Toll roads", hint: "Avoid tolled sections" },
+  { id: "ferry", label: "Ferries", hint: "Keep the route on land" },
+];
+
+/** OSRM only understands these exclude classes on the public car profile. */
+function excludeParam(avoid: AvoidOption[]) {
+  const classes = avoid.filter((a) => a === "motorway" || a === "toll" || a === "ferry");
+  return classes.length ? `&exclude=${classes.join(",")}` : "";
+}
+
+async function osrmGeometry(
+  waypoints: LatLng[],
+  avoid: AvoidOption[],
+  loop: boolean,
+): Promise<{ coords: LatLng[]; duration: number } | null> {
+  const coords = waypoints.map((p) => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`).join(";");
+  const base = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson${
+    loop ? "&continue_straight=false" : ""
+  }`;
+
+  const attempt = async (url: string) => {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      code: string;
+      routes?: Array<{ duration: number; geometry: { coordinates: [number, number][] } }>;
+    };
+    const r = json.routes?.[0];
+    if (json.code !== "Ok" || !r || r.geometry.coordinates.length < 4) return null;
+    return {
+      coords: r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
+      duration: r.duration,
+    };
+  };
+
+  // Try with the avoidance filter first; fall back to an unfiltered route if the
+  // exclusions make the request unroutable.
+  return (await attempt(base + excludeParam(avoid))) ?? (await attempt(base));
+}
+
+/**
+ * Turn a real OSM polyline into a full route: distances, a synthesised
+ * elevation profile and ride statistics.
+ */
+function buildFromGeometry(
+  raw: LatLng[],
+  vehicle: Vehicle,
+  eleAt: (frac: number, distM: number) => number,
+) {
+  const dists: number[] = [0];
+  for (let i = 1; i < raw.length; i++) dists.push(dists[i - 1]! + haversine(raw[i - 1]!, raw[i]!));
+  const total = dists[dists.length - 1]!;
+
+  const points: RoutePoint[] = raw.map((p, i) => ({
+    ...p,
+    dist: dists[i]!,
+    ele: Math.round(eleAt(total ? dists[i]! / total : 0, dists[i]!)),
+  }));
+
+  let ascent = 0;
+  let descent = 0;
+  for (let i = 1; i < points.length; i++) {
+    const d = points[i]!.ele - points[i - 1]!.ele;
+    if (d > 0) ascent += d;
+    else descent -= d;
+  }
+
+  const distanceKm = total / 1000;
+  const speed = vehicle === "moto" ? 26 : 12;
+  const estMinutes = Math.round(
+    (distanceKm / speed) * 60 + ascent / (vehicle === "moto" ? 12 : 8),
+  );
+
+  return {
+    points,
+    total,
+    distanceKm,
+    ascent: Math.round(ascent),
+    descent: Math.round(descent),
+    maxEle: Math.max(...points.map((p) => p.ele)),
+    minEle: Math.min(...points.map((p) => p.ele)),
+    avgGrade: total ? (ascent / total) * 100 : 0,
+    estMinutes,
+  };
+}
+
 /* ---------- snap to real OSM ways (OSRM) ---------- */
 
 function interpolateEle(points: RoutePoint[], fraction: number) {
@@ -387,12 +481,23 @@ function interpolateEle(points: RoutePoint[], fraction: number) {
   return points[points.length - 1]!.ele;
 }
 
+function avoidSentence(avoid: AvoidOption[]) {
+  if (!avoid.length) return "";
+  const labels = AVOID_OPTIONS.filter((o) => avoid.includes(o.id)).map((o) =>
+    o.label.toLowerCase(),
+  );
+  return ` Routing was filtered to avoid ${labels.join(", ")}.`;
+}
+
 /**
  * Snap a synthesised loop onto real OpenStreetMap ways using the public OSRM
  * service, so the drawn line follows actual tracks/roads on the map instead of
  * cutting across terrain. Falls back to the original geometry on any failure.
  */
-export async function snapRouteToPaths(route: GeneratedRoute): Promise<GeneratedRoute> {
+export async function snapRouteToPaths(
+  route: GeneratedRoute,
+  avoid: AvoidOption[] = [],
+): Promise<GeneratedRoute> {
   try {
     const wanted = 9;
     const step = Math.max(1, Math.floor((route.points.length - 1) / wanted));
@@ -400,61 +505,105 @@ export async function snapRouteToPaths(route: GeneratedRoute): Promise<Generated
     for (let i = 0; i < route.points.length - 1; i += step) waypoints.push(route.points[i]!);
     waypoints.push(route.points[0]!); // close the loop
 
-    const coords = waypoints.map((p) => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`).join(";");
-    const res = await fetch(
-      `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&continue_straight=false`,
+    const geo = await osrmGeometry(waypoints, avoid, true);
+    if (!geo || geo.coords.length < 10) return route;
+
+    const built = buildFromGeometry(geo.coords, route.vehicle, (frac) =>
+      interpolateEle(route.points, frac),
     );
-    if (!res.ok) return route;
-    const json = (await res.json()) as {
-      code: string;
-      routes?: Array<{ geometry: { coordinates: [number, number][] } }>;
-    };
-    const geo = json.routes?.[0]?.geometry.coordinates;
-    if (json.code !== "Ok" || !geo || geo.length < 10) return route;
+    if (!built.total) return route;
 
-    // Build snapped points with distance + elevation resampled from the profile.
-    const raw: LatLng[] = geo.map(([lng, lat]) => ({ lat, lng }));
-    const dists: number[] = [0];
-    for (let i = 1; i < raw.length; i++) dists.push(dists[i - 1]! + haversine(raw[i - 1]!, raw[i]!));
-    const total = dists[dists.length - 1]!;
-    if (!total) return route;
-
-    const points: RoutePoint[] = raw.map((p, i) => ({
-      ...p,
-      dist: dists[i]!,
-      ele: Math.round(interpolateEle(route.points, dists[i]! / total)),
-    }));
-
-    let ascent = 0;
-    let descent = 0;
-    for (let i = 1; i < points.length; i++) {
-      const d = points[i]!.ele - points[i - 1]!.ele;
-      if (d > 0) ascent += d;
-      else descent -= d;
-    }
-
-    const distanceKm = total / 1000;
-    const speed = route.vehicle === "moto" ? 26 : 12;
-    const estMinutes = Math.round(
-      (distanceKm / speed) * 60 + ascent / (route.vehicle === "moto" ? 12 : 8),
-    );
+    const { total: _total, ...stats } = built;
 
     return {
       ...route,
-      points,
-      distanceKm,
-      ascent: Math.round(ascent),
-      descent: Math.round(descent),
-      maxEle: Math.max(...points.map((p) => p.ele)),
-      minEle: Math.min(...points.map((p) => p.ele)),
-      avgGrade: (ascent / total) * 100,
-      estMinutes,
-      description: route.description.replace(
-        /^A [\d.]+ km loop/,
-        `A ${distanceKm.toFixed(1)} km loop`,
-      ),
+      ...stats,
+      avoid,
+      mode: "loop",
+      description:
+        route.description.replace(/^A [\d.]+ km loop/, `A ${stats.distanceKm.toFixed(1)} km loop`) +
+        avoidSentence(avoid),
     };
   } catch {
     return route;
   }
 }
+
+/* ---------- point-to-point planning with waypoints ---------- */
+
+/**
+ * Navigate between a start, any number of via points and an end, following real
+ * OSM ways. Returns null when the routing service cannot connect the pins.
+ */
+export async function planWaypointRoute(
+  prompt: string,
+  pins: LatLng[],
+  vehicle: Vehicle,
+  avoid: AvoidOption[] = [],
+): Promise<GeneratedRoute | null> {
+  if (pins.length < 2) return null;
+  const geo = await osrmGeometry(pins, avoid, false);
+  if (!geo) return null;
+
+  const cfg = parsePrompt(prompt);
+  const seed = hashString(
+    prompt + vehicle + pins.map((p) => p.lat.toFixed(3) + p.lng.toFixed(3)).join(),
+  );
+  const rnd = mulberry(seed);
+  const baseEle = 240 + rnd() * 900;
+  const climbAmp = (vehicle === "moto" ? 260 : 200) * cfg.climbFactor * (0.7 + rnd() * 0.8);
+  const phase = rnd() * Math.PI * 2;
+
+  const built = buildFromGeometry(geo.coords, vehicle, (frac) => {
+    const t = frac * Math.PI * 2;
+    let e =
+      baseEle +
+      climbAmp * (0.5 - 0.5 * Math.cos(t * (cfg.climbFactor > 1.5 ? 2 : 1))) +
+      climbAmp * 0.25 * Math.sin(t * 3 + phase);
+    if (cfg.technical) e += 18 * Math.sin(t * 21 + phase);
+    if (!cfg.flowy) e += 9 * Math.sin(t * 47);
+    return e;
+  });
+
+  const { total, ...stats } = built;
+  if (!total) return null;
+
+  const techScore = (cfg.technical ? 2 : 0) + (stats.avgGrade > 5 ? 2 : stats.avgGrade > 3 ? 1 : 0);
+  const difficulty = (
+    vehicle === "moto"
+      ? ["Green lane", "Trail / Easy enduro", "Hard enduro", "Extreme enduro"]
+      : ["Blue — flowy", "Blue/Black", "Black — technical", "Double black"]
+  )[Math.min(3, techScore)]!;
+
+  const vias = pins.length - 2;
+  const placeLabel = cfg.place ?? "your pins";
+
+  const description = [
+    `A ${stats.distanceKm.toFixed(1)} km point-to-point line from your start pin to your finish pin${
+      vias > 0 ? `, routed through ${vias} waypoint${vias > 1 ? "s" : ""}` : ""
+    }.`,
+    `It climbs ${stats.ascent} m in total, topping out at ${stats.maxEle} m with an average gradient of ${stats.avgGrade.toFixed(1)}%. Surface is predominantly ${cfg.surface.toLowerCase()}.`,
+    prompt.trim() ? `Character drafted from your brief “${prompt.trim()}”.` : "",
+    vehicle === "moto"
+      ? "Plan fuel around the midpoint — connector sections stay rideable after rain."
+      : "Carry at least 2 L of water; refills are unreliable away from the valley floor.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: hashString(prompt + Date.now()).toString(36),
+    name: `${routeName(prompt, cfg, rnd, placeLabel).split(" — ")[0]} — point to point`,
+    prompt: prompt.trim(),
+    vehicle,
+    ...stats,
+    difficulty,
+    surface: cfg.surface,
+    description: description + avoidSentence(avoid),
+    highlights: buildHighlights(cfg, vehicle, stats.maxEle, stats.ascent, rnd),
+    refs: buildRefs(prompt, cfg, vehicle, stats.distanceKm, rnd, placeLabel),
+    avoid,
+    mode: "ptp",
+  };
+}
+
