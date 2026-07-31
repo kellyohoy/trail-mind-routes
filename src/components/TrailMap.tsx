@@ -1,5 +1,13 @@
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Polyline,
+  CircleMarker,
+  Tooltip,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import type { GeneratedRoute, LatLng } from "@/lib/trail-engine";
 
 function Fit({ route, center }: { route: GeneratedRoute | null; center: LatLng }) {
@@ -14,6 +22,15 @@ function Fit({ route, center }: { route: GeneratedRoute | null; center: LatLng }
       map.setView([center.lat, center.lng], 12);
     }
   }, [route, center, map]);
+  return null;
+}
+
+function ClickCatcher({ onMapClick }: { onMapClick: (p: LatLng) => void }) {
+  useMapEvents({
+    click(e) {
+      onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+  });
   return null;
 }
 
@@ -33,19 +50,32 @@ function Marker({ route, hoverIndex }: { route: GeneratedRoute; hoverIndex: numb
   );
 }
 
+function pinLabel(i: number, total: number) {
+  if (i === 0) return "Start";
+  if (i === total - 1 && total > 1) return "Finish";
+  return `Waypoint ${i}`;
+}
+
 export default function TrailMap({
   route,
   center,
   hoverIndex,
   layer,
+  pins,
+  clickMode,
+  onMapClick,
+  onPinClick,
 }: {
   route: GeneratedRoute | null;
   center: LatLng;
   hoverIndex: number | null;
   layer: "street" | "topo";
+  pins: LatLng[];
+  clickMode: "area" | "pins";
+  onMapClick: (p: LatLng) => void;
+  onPinClick: (index: number) => void;
 }) {
   const line = route?.points.map((p) => [p.lat, p.lng] as [number, number]) ?? [];
-  const start = route?.points[0];
 
   return (
     <MapContainer
@@ -66,6 +96,8 @@ export default function TrailMap({
         />
       )}
 
+      <ClickCatcher onMapClick={onMapClick} />
+
       {line.length > 1 && (
         <>
           <Polyline positions={line} pathOptions={{ color: "#10160f", weight: 9, opacity: 0.55 }} />
@@ -73,23 +105,38 @@ export default function TrailMap({
         </>
       )}
 
-      {start && (
-        <CircleMarker
-          center={[start.lat, start.lng]}
-          radius={8}
-          pathOptions={{ color: "#0f1a0f", weight: 2, fillColor: "#b8e04a", fillOpacity: 1 }}
-        >
-          <Tooltip direction="right">Start / Finish</Tooltip>
-        </CircleMarker>
-      )}
+      {/* Planning pins: start, waypoints, finish */}
+      {pins.map((p, i) => {
+        const isStart = i === 0;
+        const isEnd = i === pins.length - 1 && pins.length > 1;
+        const fill = isStart ? "#b8e04a" : isEnd ? "#e0563c" : "#f0a63c";
+        return (
+          <CircleMarker
+            key={`${p.lat}-${p.lng}-${i}`}
+            center={[p.lat, p.lng]}
+            radius={isStart || isEnd ? 9 : 7}
+            pathOptions={{ color: "#0f1a0f", weight: 2, fillColor: fill, fillOpacity: 1 }}
+            eventHandlers={{
+              click: (e) => {
+                e.originalEvent.stopPropagation();
+                onPinClick(i);
+              },
+            }}
+          >
+            <Tooltip direction="top">{pinLabel(i, pins.length)} — click to remove</Tooltip>
+          </CircleMarker>
+        );
+      })}
 
-      {!route && (
+      {!route && !pins.length && (
         <CircleMarker
           center={[center.lat, center.lng]}
           radius={9}
           pathOptions={{ color: "#b8e04a", weight: 2, fillColor: "#b8e04a", fillOpacity: 0.35 }}
         >
-          <Tooltip direction="top">You are here</Tooltip>
+          <Tooltip direction="top">
+            {clickMode === "area" ? "Planning area — click the map to move it" : "You are here"}
+          </Tooltip>
         </CircleMarker>
       )}
 
