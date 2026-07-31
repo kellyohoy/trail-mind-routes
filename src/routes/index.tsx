@@ -1,13 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ClientOnly } from "@tanstack/react-router";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Layers, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import PlannerPanel from "@/components/PlannerPanel";
 import ElevationChart from "@/components/ElevationChart";
+import { useSession } from "@/hooks/useSession";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  deleteSavedRoute,
+  listSavedRoutes,
+  saveRoute,
+  type SavedRoute,
+} from "@/lib/saved-routes";
 import {
   generateRoute,
   geocodePlace,
   parsePrompt,
+  snapRouteToPaths,
   type GeneratedRoute,
   type LatLng,
   type Vehicle,
@@ -16,6 +26,7 @@ import {
 const TrailMap = lazy(() => import("@/components/TrailMap"));
 
 const DEFAULT_CENTER: LatLng = { lat: 18.7883, lng: 98.9853 }; // Chiang Mai
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
