@@ -91,7 +91,7 @@ export function parsePrompt(prompt: string) {
   const surface = surfaceKey ? SURFACE_WORDS[surfaceKey]! : "Mixed singletrack & forest road";
 
   const placeMatch = prompt.match(/\bnear\s+([A-Za-zÀ-ÿ\s'-]{2,40})/i);
-  const place = placeMatch ? placeMatch[1].trim().replace(/[.,].*$/, "") : null;
+  const place = placeMatch ? placeMatch[1]!.trim().replace(/[.,].*$/, "") : null;
 
   return {
     place,
