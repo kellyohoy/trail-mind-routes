@@ -6,6 +6,7 @@ import {
   Compass,
   Download,
   ExternalLink,
+  Flag,
   Gauge,
   Loader2,
   LogIn,
@@ -14,13 +15,15 @@ import {
   Mountain,
   Route as RouteIcon,
   Send,
+  ShieldOff,
   Star,
   Timer,
   Trash2,
   TrendingUp,
+  X,
 } from "lucide-react";
-import type { GeneratedRoute, Vehicle } from "@/lib/trail-engine";
-import { downloadGPX } from "@/lib/trail-engine";
+import type { AvoidOption, GeneratedRoute, LatLng, Vehicle } from "@/lib/trail-engine";
+import { AVOID_OPTIONS, downloadGPX } from "@/lib/trail-engine";
 import type { SavedRoute } from "@/lib/saved-routes";
 
 const EXAMPLES = [
@@ -28,6 +31,13 @@ const EXAMPLES = [
   "Long flowy forest loop near Innsbruck",
   "Technical hard enduro green lanes near Málaga",
 ];
+
+function pinLabel(i: number, total: number) {
+  if (i === 0) return "Start";
+  if (i === total - 1 && total > 1) return "Finish";
+  return `Waypoint ${i}`;
+}
+
 
 
 function Stat({
@@ -66,6 +76,13 @@ export default function PlannerPanel({
   savedRoutes,
   onOpenSaved,
   onDeleteSaved,
+  avoid,
+  onToggleAvoid,
+  pins,
+  clickMode,
+  setClickMode,
+  onRemovePin,
+  onClearPins,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
@@ -82,9 +99,18 @@ export default function PlannerPanel({
   savedRoutes: SavedRoute[];
   onOpenSaved: (r: SavedRoute) => void;
   onDeleteSaved: (id: string) => void;
+  avoid: AvoidOption[];
+  onToggleAvoid: (o: AvoidOption) => void;
+  pins: LatLng[];
+  clickMode: "area" | "pins";
+  setClickMode: (m: "area" | "pins") => void;
+  onRemovePin: (i: number) => void;
+  onClearPins: () => void;
 }) {
   const [tab, setTab] = useState<"brief" | "beta">("brief");
   const [showSaved, setShowSaved] = useState(false);
+  const ptp = pins.length >= 2;
+
 
   return (
     <div className="flex h-full flex-col overflow-hidden border-r border-border bg-sidebar">
@@ -198,14 +224,117 @@ export default function PlannerPanel({
           className="w-full resize-none rounded-sm border border-input bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-ring"
         />
 
+        {/* Avoid road types */}
+        <div className="mt-3">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
+            <ShieldOff className="size-3" />
+            Roads to avoid
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {AVOID_OPTIONS.map((o) => {
+              const on = avoid.includes(o.id);
+              return (
+                <button
+                  key={o.id}
+                  onClick={() => onToggleAvoid(o.id)}
+                  title={o.hint}
+                  aria-pressed={on}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                    on
+                      ? "border-primary bg-primary/15 text-foreground"
+                      : "border-border text-muted-foreground hover:border-accent hover:text-accent"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Map click mode + pins */}
+        <div className="mt-3 rounded-sm border border-border bg-card p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
+              <Flag className="size-3" />
+              Map clicks
+            </div>
+            <div className="inline-flex rounded-sm border border-border p-0.5">
+              {(
+                [
+                  ["area", "Set area"],
+                  ["pins", "Drop pins"],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => setClickMode(m)}
+                  className={`rounded-[2px] px-2 py-1 text-[11px] font-medium transition-colors ${
+                    clickMode === m
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            {clickMode === "area"
+              ? "Click anywhere on the map to plan a loop around that spot."
+              : "Click the map to set a start, then a finish. Extra clicks add waypoints in between."}
+          </p>
+
+          {pins.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {pins.map((p, i) => (
+                <div
+                  key={`${p.lat}-${p.lng}-${i}`}
+                  className="flex items-center gap-2 rounded-sm border border-border bg-background px-2 py-1"
+                >
+                  <span
+                    className={`size-2 shrink-0 rounded-full ${
+                      i === 0
+                        ? "bg-moss"
+                        : i === pins.length - 1 && pins.length > 1
+                          ? "bg-clay"
+                          : "bg-accent"
+                    }`}
+                  />
+                  <span className="text-[11px] font-medium">{pinLabel(i, pins.length)}</span>
+                  <span className="flex-1 truncate text-[10px] text-muted-foreground">
+                    {p.lat.toFixed(4)}, {p.lng.toFixed(4)}
+                  </span>
+                  <button
+                    onClick={() => onRemovePin(i)}
+                    aria-label={`Remove ${pinLabel(i, pins.length)}`}
+                    className="text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={onClearPins}
+                className="text-[11px] text-muted-foreground underline-offset-2 transition-colors hover:text-destructive hover:underline"
+              >
+                Clear all pins
+              </button>
+            </div>
+          )}
+        </div>
+
         <button
           onClick={onGenerate}
-          disabled={loading || !prompt.trim()}
-          className="mt-2 flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+          disabled={loading || (!ptp && !prompt.trim())}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-          {loading ? "Plotting the line…" : "Plan my route"}
+          {loading ? "Plotting the line…" : ptp ? "Navigate my pins" : "Plan my route"}
         </button>
+
 
         <div className="mt-3 flex flex-wrap gap-1.5">
           {EXAMPLES.map((e) => (
