@@ -74,7 +74,11 @@ function Index() {
   const [layer, setLayer] = useState<"street" | "topo">("topo");
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
   const [saving, setSaving] = useState(false);
+  const [avoid, setAvoid] = useState<AvoidOption[]>([]);
+  const [pins, setPins] = useState<LatLng[]>([]);
+  const [clickMode, setClickMode] = useState<"area" | "pins">("area");
   const { user } = useSession();
+
   const navigate = useNavigate();
 
   const refreshSaved = useCallback(() => {
