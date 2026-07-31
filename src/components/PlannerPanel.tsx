@@ -258,6 +258,20 @@ export default function PlannerPanel({
               <Download className="size-4" />
               Download .GPX
             </button>
+
+            <button
+              onClick={onSave}
+              disabled={saving}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-sm border border-border bg-secondary px-4 py-2.5 text-sm font-semibold text-secondary-foreground transition-colors hover:border-primary disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Bookmark className="size-4" />
+              )}
+              {userEmail ? "Save route" : "Sign in to save route"}
+            </button>
+
             <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
               Loads straight into Garmin, Wahoo, Trail Tech or Gaia.
             </p>
