@@ -88,7 +88,7 @@ export function parsePrompt(prompt: string) {
   const flowy = has("flow", "smooth", "beginner", "mellow", "easy");
 
   const surfaceKey = Object.keys(SURFACE_WORDS).find((k) => p.includes(k));
-  const surface = surfaceKey ? SURFACE_WORDS[surfaceKey] : "Mixed singletrack & forest road";
+  const surface = surfaceKey ? SURFACE_WORDS[surfaceKey]! : "Mixed singletrack & forest road";
 
   const placeMatch = prompt.match(/\bnear\s+([A-Za-zÀ-ÿ\s'-]{2,40})/i);
   const place = placeMatch ? placeMatch[1].trim().replace(/[.,].*$/, "") : null;
@@ -114,7 +114,7 @@ export async function geocodePlace(place: string): Promise<LatLng | null> {
     if (!res.ok) return null;
     const json = (await res.json()) as Array<{ lat: string; lon: string }>;
     if (!json.length) return null;
-    return { lat: parseFloat(json[0].lat), lng: parseFloat(json[0].lon) };
+    return { lat: parseFloat(json[0]!.lat), lng: parseFloat(json[0]!.lon) };
   } catch {
     return null;
   }
@@ -173,13 +173,13 @@ export function generateRoute(
     let e =
       baseEle +
       climbAmp * (0.5 - 0.5 * Math.cos(t * (cfg.climbFactor > 1.5 ? 2 : 1))) +
-      climbAmp * 0.25 * Math.sin(t * 3 + harmonics[0].phase);
-    if (cfg.technical) e += 18 * Math.sin(t * 21 + harmonics[1].phase);
+      climbAmp * 0.25 * Math.sin(t * 3 + harmonics[0]!.phase);
+    if (cfg.technical) e += 18 * Math.sin(t * 21 + harmonics[1]!.phase);
     if (!cfg.flowy) e += 9 * Math.sin(t * 47);
     eleRaw.push(e);
   }
-  raw[raw.length - 1] = raw[0];
-  eleRaw[eleRaw.length - 1] = eleRaw[0];
+  raw[raw.length - 1] = raw[0]!;
+  eleRaw[eleRaw.length - 1] = eleRaw[0]!;
 
   const points: RoutePoint[] = [];
   let dist = 0;
@@ -187,12 +187,12 @@ export function generateRoute(
   let descent = 0;
   for (let i = 0; i < raw.length; i++) {
     if (i > 0) {
-      dist += haversine(raw[i - 1], raw[i]);
-      const d = eleRaw[i] - eleRaw[i - 1];
+      dist += haversine(raw[i - 1]!, raw[i]!);
+      const d = eleRaw[i]! - eleRaw[i - 1]!;
       if (d > 0) ascent += d;
       else descent -= d;
     }
-    points.push({ ...raw[i], dist, ele: Math.round(eleRaw[i]) });
+    points.push({ ...raw[i]!, dist, ele: Math.round(eleRaw[i]!) });
   }
 
   const distanceKm = dist / 1000;
@@ -264,7 +264,7 @@ function routeName(
       ? ["Velvet", "Ribbon", "Silk", "Glide"]
       : ["Ridge", "Cloud", "Pine", "Monsoon"];
   const noun = cfg.climbFactor > 1.5 ? ["Ascent", "Skyline", "Summit"] : ["Loop", "Circuit", "Traverse"];
-  return `${adj[Math.floor(rnd() * adj.length)]} ${noun[Math.floor(rnd() * noun.length)]} — ${place}`;
+  return `${adj[Math.floor(rnd() * adj.length)]!} ${noun[Math.floor(rnd() * noun.length)]!} — ${place}`;
 }
 
 function buildHighlights(
@@ -313,8 +313,8 @@ function buildRefs(
 
   const mk = (source: TrailRef["source"], i: number): TrailRef => ({
     source,
-    name: names[i],
-    difficulty: diffs[i % diffs.length],
+    name: names[i]!,
+    difficulty: diffs[i % diffs.length]!,
     rating: Math.round((3.6 + rnd() * 1.4) * 10) / 10,
     length: Math.round(distanceKm * (0.12 + rnd() * 0.3) * 10) / 10,
     note:
