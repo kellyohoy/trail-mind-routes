@@ -374,51 +374,74 @@ export function downloadGPX(route: GeneratedRoute) {
 
 /* ---------- road-type avoidance ---------- */
 
-export type AvoidOption = "motorway" | "toll" | "ferry" | "unpaved" | "backroad";
+export type AvoidOption = "motorway" | "unpaved" | "backroad";
 
 export const AVOID_OPTIONS: { id: AvoidOption; label: string; hint: string }[] = [
-  { id: "motorway", label: "Highways", hint: "Skip motorways and trunk roads" },
-  { id: "unpaved", label: "Off-road", hint: "Prefer sealed surfaces over dirt and gravel" },
-  { id: "backroad", label: "Back roads", hint: "Stay on bigger, better-maintained roads" },
-  { id: "toll", label: "Toll roads", hint: "Avoid tolled sections" },
-  { id: "ferry", label: "Ferries", hint: "Keep the route on land" },
+  {
+    id: "motorway",
+    label: "Highways",
+    hint: "Keep off motorways, trunk roads and fast main roads",
+  },
+  {
+    id: "unpaved",
+    label: "Off-road",
+    hint: "Stay on driveable, mostly sealed roads instead of tracks and trails",
+  },
+  {
+    id: "backroad",
+    label: "Back roads",
+    hint: "Favour bigger, better-maintained roads over narrow lanes",
+  },
 ];
 
-/** OSRM only understands these exclude classes on the public car profile. */
-function excludeParam(avoid: AvoidOption[]) {
-  const classes = avoid.filter((a) => a === "motorway" || a === "toll" || a === "ferry");
-  return classes.length ? `&exclude=${classes.join(",")}` : "";
+/**
+ * The routing engine honours avoidance by switching OSM routing profile:
+ * the bike profile never uses motorways, the car profile never uses tracks
+ * and footpaths and prefers bigger roads.
+ */
+function profileFor(vehicle: Vehicle, avoid: AvoidOption[]): "car" | "bike" | "foot" {
+  if (avoid.includes("motorway")) return "bike";
+  if (avoid.includes("unpaved") || avoid.includes("backroad")) return "car";
+  return vehicle === "moto" ? "car" : "bike";
 }
 
 async function osrmGeometry(
   waypoints: LatLng[],
   avoid: AvoidOption[],
   loop: boolean,
+  vehicle: Vehicle,
 ): Promise<{ coords: LatLng[]; duration: number } | null> {
   const coords = waypoints.map((p) => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`).join(";");
-  const base = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson${
-    loop ? "&continue_straight=false" : ""
-  }`;
+  const query = `?overview=full&geometries=geojson${loop ? "&continue_straight=false" : ""}`;
 
   const attempt = async (url: string) => {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      code: string;
-      routes?: Array<{ duration: number; geometry: { coordinates: [number, number][] } }>;
-    };
-    const r = json.routes?.[0];
-    if (json.code !== "Ok" || !r || r.geometry.coordinates.length < 4) return null;
-    return {
-      coords: r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
-      duration: r.duration,
-    };
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const json = (await res.json()) as {
+        code: string;
+        routes?: Array<{ duration: number; geometry: { coordinates: [number, number][] } }>;
+      };
+      const r = json.routes?.[0];
+      if (json.code !== "Ok" || !r || r.geometry.coordinates.length < 4) return null;
+      return {
+        coords: r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
+        duration: r.duration,
+      };
+    } catch {
+      return null;
+    }
   };
 
-  // Try with the avoidance filter first; fall back to an unfiltered route if the
-  // exclusions make the request unroutable.
-  return (await attempt(base + excludeParam(avoid))) ?? (await attempt(base));
+  const profile = profileFor(vehicle, avoid);
+  return (
+    (await attempt(
+      `https://routing.openstreetmap.de/routed-${profile}/route/v1/driving/${coords}${query}`,
+    )) ??
+    (await attempt(`https://router.project-osrm.org/route/v1/driving/${coords}${query}`))
+  );
 }
+
 
 /**
  * Turn a real OSM polyline into a full route: distances, a synthesised
